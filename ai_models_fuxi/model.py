@@ -45,12 +45,12 @@ class FuXi(Model):
     download_files = [
         "short",
         "short.onnx",
-        "meidum",
-        "meidum.onnx",     
+        "medium",
+        "medium.onnx",
         "long",
-        "long.onnx",             
+        "long.onnx",
     ]
-    
+
     area = [90, 0, -90, 360]
     grid = [0.25, 0.25]
     param_sfc = ["2t", "10u", "10v", "msl", "tp"]
@@ -112,7 +112,7 @@ class FuXi(Model):
                 )
                 models[stage] = model
         return models
-    
+
     def get_init_time(self):
         init_time = self.all_fields.order_by(valid_datetime="descending")[0].datetime()
         init_time = pd.to_datetime(init_time)
@@ -129,7 +129,7 @@ class FuXi(Model):
         fields_sfc = self.fields_sfc
 
         lat = fields_sfc[0].metadata("distinctLatitudes")
-        lon = fields_sfc[0].metadata("distinctLongitudes")        
+        lon = fields_sfc[0].metadata("distinctLongitudes")
 
         fields_pl = fields_pl.sel(valid_datetime=valid_time_str, param=param_pl, level=level)
         fields_pl = fields_pl.order_by(param=param_pl, valid_datetime=valid_time_str, level=level)
@@ -161,7 +161,7 @@ class FuXi(Model):
             input.append(data)
             info = (f"Name: {param}, shape: {data.shape}, range: {data.min():.3f} ~ {data.max():.3f}")
             LOG.info(info)
-        
+
         input = np.concatenate(input, axis=1)
 
         if self.debug_fx:
@@ -176,7 +176,7 @@ class FuXi(Model):
             )
             save_name = valid_time[-1].strftime("%Y%m%d%H.nc")
             self.input_xr.to_netcdf(save_name)
-        
+
         self.template_pl = fields_pl.sel(valid_datetime=valid_time_str[-1])
         self.template_sfc = fields_sfc.sel(valid_datetime=valid_time_str[-1])
         return input[None]
@@ -187,13 +187,13 @@ class FuXi(Model):
 
         models = self.load_model()
         init_time = self.get_init_time()
-        tembs = time_encoding(init_time, total_step)  
+        tembs = time_encoding(init_time, total_step)
         input = self.create_input(init_time)
-        
+
         with self.stepper(6) as stepper:
             for i in range(total_step):
                 step = (i + 1) * self.hour_steps
-                stage = self.stages[min(2, i//20)] 
+                stage = self.stages[min(2, i//20)]
 
                 new_input, = models[stage].run(
                     None, {'input': input, 'temb': tembs[i]}
@@ -211,7 +211,7 @@ class FuXi(Model):
 
                 if self.debug_fx:
                     ds = xr.DataArray(
-                        data=new_input[:, -1], 
+                        data=new_input[:, -1],
                         coords=dict(
                             step=[step],
                             channel=self.input_xr.channel,
@@ -221,7 +221,7 @@ class FuXi(Model):
                     )
                     save_dir = init_time.strftime("%Y%m%d%H")
                     os.makedirs(save_dir, exist_ok=True)
-                    ds.to_netcdf(os.path.join(save_dir, f"{step:03d}.nc"))  
+                    ds.to_netcdf(os.path.join(save_dir, f"{step:03d}.nc"))
 
                 stepper(i, step)
                 input = new_input
