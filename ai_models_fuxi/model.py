@@ -35,8 +35,7 @@ def time_encoding(init_time, total_step, freq=6):
 
 
 class FuXi(Model):
-    expver = "fdfx"
-    use_an = False
+    expver = "fuxi"
     debug_fx = False
 
     download_url = (
@@ -71,26 +70,6 @@ class FuXi(Model):
             for param in self.param_level_pl[0]
             for level in self.param_level_pl[1]
         ] + self.param_sfc
-
-
-    def patch_retrieve_request(self, r):
-        if r.get("class", "od") != "od":
-            return
-
-        if r.get("type", "an") not in ("an", "fc"):
-            return
-
-        if r.get("stream", "oper") not in ("oper", "scda"):
-            return
-
-        if self.use_an:
-            r["type"] = "an"
-        else:
-            r["type"] = "fc"
-
-        time = r.get("time", 12)
-        r["stream"] = {0: "oper", 6: "scda", 12: "oper", 18: "scda"}[time]
-
 
     def load_model(self):
         import onnxruntime as ort
