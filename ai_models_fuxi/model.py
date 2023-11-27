@@ -161,6 +161,13 @@ class FuXi(Model):
         return input[None]
 
 
+    def postprocess(self, data, template, accumulations):
+        if template.metadata("param") == "tp":
+            data = np.maximum(0, data) / 1000.0
+            accumulations += data
+            data = accumulations
+        return data
+
     def run(self):
         total_step = self.lead_time // self.hour_steps
 
@@ -168,6 +175,7 @@ class FuXi(Model):
         init_time = self.get_init_time()
         tembs = time_encoding(init_time, total_step)
         input = self.create_input(init_time)
+        accumulations = None
 
         with self.stepper(6) as stepper:
             for i in range(total_step):
@@ -185,7 +193,11 @@ class FuXi(Model):
                 for data, f in zip(pl_data, self.template_pl):
                     self.write(data, template=f, step=step)
 
+                if accumulations is None:
+                    accumulations = np.zeros_like(sfc_data[0])
+
                 for data, f in zip(sfc_data, self.template_sfc):
+                    data = self.postprocess(data, f, accumulations)
                     self.write(data, template=f, step=step)
 
                 if self.debug_fx:
