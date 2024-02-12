@@ -9,11 +9,11 @@
 import logging
 import os
 from collections import defaultdict
-from ai_models.model import Model
 
 import numpy as np
-import xarray as xr
 import pandas as pd
+import xarray as xr
+from ai_models.model import Model
 
 LOG = logging.getLogger(__name__)
 
@@ -22,10 +22,10 @@ def time_encoding(init_time, total_step, freq=6):
     init_time = np.array([init_time])
     tembs = []
     for i in range(total_step):
-        hours = np.array([pd.Timedelta(hours=t*freq) for t in [i-1, i, i+1]])
+        hours = np.array([pd.Timedelta(hours=t * freq) for t in [i - 1, i, i + 1]])
         times = init_time[:, None] + hours[None]
-        times = [pd.Period(t, 'H') for t in times.reshape(-1)]
-        times = [(p.day_of_year/366, p.hour/24) for p in times]
+        times = [pd.Period(t, "H") for t in times.reshape(-1)]
+        times = [(p.day_of_year / 366, p.hour / 24) for p in times]
         temb = np.array(times, dtype=np.float32)
         temb = np.concatenate([np.sin(temb), np.cos(temb)], axis=-1)
         temb = temb.reshape(1, -1)
@@ -33,14 +33,11 @@ def time_encoding(init_time, total_step, freq=6):
     return np.stack(tembs)
 
 
-
 class FuXi(Model):
     expver = "fuxi"
     debug_fx = False
 
-    download_url = (
-        "https://get.ecmwf.int/repository/test-data/ai-models/fuxi/{file}"
-    )
+    download_url = "https://get.ecmwf.int/repository/test-data/ai-models/fuxi/{file}"
     download_files = [
         "short",
         "short.onnx",
@@ -73,6 +70,7 @@ class FuXi(Model):
 
     def load_model(self):
         import onnxruntime as ort
+
         ort.set_default_logger_severity(3)
         options = ort.SessionOptions()
         options.enable_cpu_mem_arena = False
@@ -100,7 +98,7 @@ class FuXi(Model):
     def create_input(self, init_time):
         hist_time = init_time - pd.Timedelta(hours=6)
         valid_time = [hist_time, init_time]
-        valid_time_str = [t.strftime('%Y-%m-%dT%H:%M:%S') for t in valid_time]
+        valid_time_str = [t.strftime("%Y-%m-%dT%H:%M:%S") for t in valid_time]
 
         param_sfc = self.param_sfc
         param_pl, level = self.param_level_pl
@@ -110,8 +108,12 @@ class FuXi(Model):
         lat = fields_sfc[0].metadata("distinctLatitudes")
         lon = fields_sfc[0].metadata("distinctLongitudes")
 
-        fields_pl = fields_pl.sel(valid_datetime=valid_time_str, param=param_pl, level=level)
-        fields_pl = fields_pl.order_by(param=param_pl, valid_datetime=valid_time_str, level=level)
+        fields_pl = fields_pl.sel(
+            valid_datetime=valid_time_str, param=param_pl, level=level
+        )
+        fields_pl = fields_pl.order_by(
+            param=param_pl, valid_datetime=valid_time_str, level=level
+        )
 
         pl = defaultdict(list)
         for field in fields_pl:
@@ -119,6 +121,8 @@ class FuXi(Model):
 
         fields_sfc = fields_sfc.sel(valid_datetime=valid_time_str, param=param_sfc)
         fields_sfc = fields_sfc.order_by(param=param_sfc, valid_datetime=valid_time_str)
+
+        self.write_input_fields(fields_pl + fields_sfc)
 
         sfc = defaultdict(list)
         for field in fields_sfc:
@@ -130,7 +134,7 @@ class FuXi(Model):
                 [field.to_numpy(dtype=np.float32) for field in fields]
             ).reshape(-1, len(level), len(lat), len(lon))
             input.append(data)
-            info = (f"Name: {param}, shape: {data.shape}, range: {data.min():.3f} ~ {data.max():.3f}")
+            info = f"Name: {param}, shape: {data.shape}, range: {data.min():.3f} ~ {data.max():.3f}"
             LOG.info(info)
 
         for param, fields in sfc.items():
@@ -138,7 +142,7 @@ class FuXi(Model):
                 [field.to_numpy(dtype=np.float32) for field in fields]
             ).reshape(-1, 1, len(lat), len(lon))
             input.append(data)
-            info = (f"Name: {param}, shape: {data.shape}, range: {data.min():.3f} ~ {data.max():.3f}")
+            info = f"Name: {param}, shape: {data.shape}, range: {data.min():.3f} ~ {data.max():.3f}"
             LOG.info(info)
 
         input = np.concatenate(input, axis=1)
@@ -160,7 +164,6 @@ class FuXi(Model):
         self.template_sfc = fields_sfc.sel(valid_datetime=valid_time_str[-1])
         return input[None]
 
-
     def postprocess(self, data, template, accumulations):
         if template.metadata("param") == "tp":
             data = np.maximum(0, data) / 1000.0
@@ -180,10 +183,10 @@ class FuXi(Model):
         with self.stepper(6) as stepper:
             for i in range(total_step):
                 step = (i + 1) * self.hour_steps
-                stage = self.stages[min(2, i//20)]
+                stage = self.stages[min(2, i // 20)]
 
-                new_input, = models[stage].run(
-                    None, {'input': input, 'temb': tembs[i]}
+                (new_input,) = models[stage].run(
+                    None, {"input": input, "temb": tembs[i]}
                 )
 
                 pl_chans = len(self.ordering) - len(self.param_sfc)
